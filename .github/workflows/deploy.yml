@@ -4,21 +4,73 @@ on:
     branches: [ "deploy" ]
 
 jobs:
-  deploy-to-ec2:
+  build-and-push:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout código
         uses: actions/checkout@v3
 
-      - name: Desplegar en EC2 Backend mediante Docker Compose
+      - name: Login DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Push Despachos Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./back-Despachos_SpringBoot
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smartlogix-despachos:latest
+
+      - name: Build and Push Ventas Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./back-Ventas_SpringBoot
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/smartlogix-ventas:latest
+
+  deploy-to-ec2:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Desplegar en EC2 Backend
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.EC2_BACKEND_IP }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Clona o actualiza el repo directamente en la EC2 (Asegúrate de que la EC2 tenga acceso a git o usa el método de copia)
-            cd ~/devops-evaluacion-2-backend || git clone -b deploy https://github.com/TU_USUARIO/devops-evaluacion-2-backend.git ~/devops-evaluacion-2-backend
-            cd ~/devops-evaluacion-2-backend
-            git pull origin deploy
-            sudo docker compose up -d --build
+            # Variables de BD
+            export DB_ENDPOINT=${{ secrets.DB_ENDPOINT }}
+            export DB_PORT=${{ secrets.DB_PORT }}
+            export DB_NAME_DESPACHOS=${{ secrets.DB_NAME_DESPACHOS }}
+            export DB_NAME_VENTAS=${{ secrets.DB_NAME_VENTAS }}
+            export DB_USERNAME=${{ secrets.DB_USERNAME }}
+            export DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            
+            # Despachos
+            sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/smartlogix-despachos:latest
+            sudo docker stop despachos-app || true
+            sudo docker rm despachos-app || true
+            sudo docker run -d --name despachos-app \
+              -p 8081:8081 \
+              -e DB_ENDPOINT=$DB_ENDPOINT \
+              -e DB_PORT=$DB_PORT \
+              -e DB_NAME=$DB_NAME_DESPACHOS \
+              -e DB_USERNAME=$DB_USERNAME \
+              -e DB_PASSWORD=$DB_PASSWORD \
+              ${{ secrets.DOCKERHUB_USERNAME }}/smartlogix-despachos:latest
+            
+            # Ventas
+            sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/smartlogix-ventas:latest
+            sudo docker stop ventas-app || true
+            sudo docker rm ventas-app || true
+            sudo docker run -d --name ventas-app \
+              -p 8080:8080 \
+              -e DB_ENDPOINT=$DB_ENDPOINT \
+              -e DB_PORT=$DB_PORT \
+              -e DB_NAME=$DB_NAME_VENTAS \
+              -e DB_USERNAME=$DB_USERNAME \
+              -e DB_PASSWORD=$DB_PASSWORD \
+              ${{ secrets.DOCKERHUB_USERNAME }}/smartlogix-ventas:latest
