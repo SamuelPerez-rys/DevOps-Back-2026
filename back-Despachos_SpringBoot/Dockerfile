@@ -16,7 +16,7 @@ COPY ./Springboot-API-REST-DESPACHO .
 RUN mvn clean package -DskipTests
 
 # Stage 2: Runtime
-FROM eclipse-temurin:17-jdk-slim
+FROM openjdk:17
 
 WORKDIR /app
 
@@ -26,7 +26,7 @@ COPY --from=builder /app/target/*.jar app.jar
 # Exponer puerto 8081
 EXPOSE 8081
 
-# Variables de entorno (serán seteadas en deployment)
+# Variables de entorno
 ENV DB_ENDPOINT=localhost
 ENV DB_PORT=3306
 ENV DB_NAME=despachos_db
