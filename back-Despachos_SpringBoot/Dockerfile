@@ -16,7 +16,7 @@ COPY ./Springboot-API-REST-DESPACHO .
 RUN mvn clean package -DskipTests
 
 # Stage 2: Runtime
-FROM openjdk:17
+FROM amazoncorretto:17
 
 WORKDIR /app
 
